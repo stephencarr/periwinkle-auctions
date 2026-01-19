@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// User & Authentication
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          Role      @default(USER)
+  emailVerified DateTime?
+  suspended     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  auctions      Auction[] @relation("SellerAuctions")
+  wonAuctions   Auction[] @relation("WinnerAuctions")
+  bids          Bid[]
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// ============================================
+// Auctions
+// ============================================
+
+model Auction {
+  id            String        @id @default(cuid())
+  title         String
+  description   String
+  images        String[]
+  category      String
+  startingPrice Decimal       @db.Decimal(10, 2)
+  currentPrice  Decimal       @db.Decimal(10, 2)
+  reservePrice  Decimal?      @db.Decimal(10, 2)
+  bidIncrement  Decimal       @db.Decimal(10, 2) @default(1.00)
+  startTime     DateTime
+  endTime       DateTime
+  status        AuctionStatus @default(DRAFT)
+  featured      Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  sellerId String
+  seller   User   @relation("SellerAuctions", fields: [sellerId], references: [id])
+
+  winnerId String?
+  winner   User?   @relation("WinnerAuctions", fields: [winnerId], references: [id])
+
+  bids    Bid[]
+  payment Payment?
+
+  @@index([status])
+  @@index([endTime])
+  @@index([category])
+  @@index([sellerId])
+  @@map("auctions")
+}
+
+enum AuctionStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  ENDED
+  SOLD
+  CANCELLED
+}
+
+// ============================================
+// Bids
+// ============================================
+
+model Bid {
+  id        String   @id @default(cuid())
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  // Relations
+  auctionId String
+  auction   Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  bidderId String
+  bidder   User   @relation(fields: [bidderId], references: [id])
+
+  @@index([auctionId, createdAt(sort: Desc)])
+  @@index([bidderId])
+  @@map("bids")
+}
+
+// ============================================
+// Payments
+// ============================================
+
+model Payment {
+  id              String        @id @default(cuid())
+  squarePaymentId String        @unique
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("USD")
+  status          PaymentStatus @default(PENDING)
+  receiptUrl      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  auctionId String  @unique
+  auction   Auction @relation(fields: [auctionId], references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
